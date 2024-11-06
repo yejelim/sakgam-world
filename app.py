@@ -166,6 +166,10 @@ department_datasets = {
     "대장항문외과 (Colorectal Surgery)": {
         "bucket_name": "hemochat-rag-database",
         "file_key": "tagged_colorectal_general_criterion_fixed.json"
+    },
+    "정맥경장영양 (TPN)": {
+        "bucket_name": "hemochat-rag-database",
+        "file_key": "tagged_few_TPN_criterion.json"
     }
 }
 
