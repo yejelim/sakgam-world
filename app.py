@@ -131,7 +131,8 @@ def collect_user_input():
             options=[
                 "신경외과 (Neuro-Surgery)",
                 "혈관외과 (Vascular Surgery)",
-                "대장항문외과 (Colorectal Surgery)"
+                "대장항문외과 (Colorectal Surgery)",
+                "정맥경장영양 (TPN)"
             ]
         )
 
