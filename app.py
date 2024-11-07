@@ -141,16 +141,35 @@ def collect_user_input():
     st.session_state['other_occupation'] = other_occupation
     st.session_state['department'] = department
 
+    # 체크박스 크기 조절을 위한 CSS
+    st.markdown("""
+    <style>
+    /* 체크박스 크기 증가 */
+    [data-testid="stCheckbox"] > label > div:first-child {
+        transform: scale(1.5);
+    }
+        
+    /* 빨간색 안내 문구와 글자 크기 조정 */
+    .warning-text {
+        color: red;
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 체크박스 위에 빨간색 안내 문구 추가 (체크되지 않은 경우에만 표시)
+    if not st.session_state.get('agree_to_collect', False):
+        st.markdown('<div class="warning-text">약관에 동의하셔야 삭감여부 확인이 가능합니다.</div>', unsafe_allow_html=True)
+
     agree_to_collect = st.checkbox(
         "사용자 정보를 수집하는 것에 동의합니다. 사용자의 텍스트 입력은 개인정보 보호를 위해 수집되지 않으며, 수집된 정보는 일정 기간 후 파기됩니다.",
         key="agree_to_collect"
     )
 
     # '삭감 여부 확인' 버튼을 체크박스 동의 여부에 따라 활성화/비활성화
-    if agree_to_collect:
-        st.session_state['button_disabled'] = False
-    else:
-        st.session_state['button_disabled'] = True
+    st.session_state['button_disabled'] = not agree_to_collect
 
     return occupation, other_occupation, department, user_input
 
@@ -158,7 +177,7 @@ def collect_user_input():
 department_datasets = {
     "신경외과 (Neuro-Surgery)": {
         "bucket_name": "hemochat-rag-database",
-        "file_key": "18_aga_tagged_embedded_data.json"
+        "file_key": "18_aga_tagged_embedded_data.json.json"
     },
     "혈관외과 (Vascular Surgery)": {
         "bucket_name": "hemochat-rag-database",
@@ -170,7 +189,7 @@ department_datasets = {
     },
     "정맥경장영양 (TPN)": {
         "bucket_name": "hemochat-rag-database",
-        "file_key": "tagged_few_TPN_criterion.json"
+        "file_key": "Experimental_title_only_embedded_TPN_criterion.json"
     }
 }
 
@@ -295,7 +314,7 @@ def find_top_n_similar(embedding, vectors, metadatas, top_n=5):
 def evaluate_relevance_with_gpt(structured_input, items):
     try:
         prompt_template = st.secrets["openai"]["prompt_scoring"]
-        formatted_items = "\n\n".join([f"항목 {i+1}: {item['제목']}이다. {item['요약']}" for i, item in enumerate(items)])
+        formatted_items = "\n\n".join([f"항목 {i+1}: {item['요약']}" for i, item in enumerate(items)])
         prompt = prompt_template.format(user_input=structured_input, items=formatted_items)
 
         with st.spinner("연관성 점수 평가 중..."):
@@ -389,7 +408,7 @@ def retry_embedding_and_search(department, user_input, vectors, metadatas):
 # 설명: 재시도 횟수를 기록하고, 재시도 횟수가 최대 재시도 횟수를 초과하면 경고 메시지를 표시하고 재시도를 중단하는 함수
 def handle_retries(department, user_input):
     if st.session_state.retry_attempts >= st.session_state.max_attempts:
-        st.warning("죄송합니다. 응담 과정에서 문제가 발생했습니다. 다시 시도하려면 '삭감 여부 확인' 버튼을 한 번 더 눌러주세요.")
+        st.warning("죄송합니다. 응답 과정에서 문제가 발생했습니다. 다시 시도하려면 '삭감 여부 확인' 버튼을 한 번 더 눌러주세요.")
         st.session_state.retry_type = None
         return
 
@@ -482,7 +501,7 @@ def display_results(embedding, vectors, metadatas, structured_input):
 def extract_text_between_numbers(structured_input):
     import re
     # 정규표현식을 사용하여 "2."와 "6." 사이의 텍스트를 추출
-    pattern = r"2\.(.*?)5\."
+    pattern = r"수술 및 치료, 날짜나 기간\s*[:\-]?\s*(.*?)\s*치료재료"
     match = re.search(pattern, structured_input, re.DOTALL)
     if match:
         extracted_text = match.group(1).strip()
