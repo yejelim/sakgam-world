@@ -16,6 +16,8 @@ st.set_page_config(
 
 # 설명: 세션 상태 초기화 함수
 def initialize_session_state():
+    if not hasattr(st, 'session_state') or st.session_state is None:
+        st.session_state = {}
     session_state_defaults = {
         'is_clinical_note': False,
         'conversation': [],
