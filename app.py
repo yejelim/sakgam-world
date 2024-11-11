@@ -11,13 +11,12 @@ from datetime import datetime
 
 # 페이지 설정 (가장 상단에 위치해야 함)
 st.set_page_config(
+    page_title="의료비 삭감 판정 어시스트 - beta version.",
     layout="wide",  # 창 전체를 사용하도록 설정
 )
 
-# 설명: 세션 상태 초기화 함수
+# 세션 상태 변수 초기화
 def initialize_session_state():
-    if not hasattr(st, 'session_state') or st.session_state is None:
-        st.session_state = {}
     session_state_defaults = {
         'is_clinical_note': False,
         'conversation': [],
@@ -46,13 +45,13 @@ initialize_session_state()
 # OpenAI API 키 설정 (Streamlit secrets 사용)
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# 설명: 로고 이미지를 사이드바에 추가
+# 로고 추가 함수
 def add_logo():
     with st.sidebar:
         logo_path = "logo.png"  # 올바른 URL 사용
         st.image(logo_path, width=150)  # 로고 크기 조정
 
-# 설명: 입력 텍스트가 임상 노트인지 확인하는 함수
+# 임상 노트 여부 확인 함수
 def check_if_clinical_note(text):
     try:
         prompt = f"다음 텍스트가 임상 노트인지 여부를 판단해주세요:\n\n{text}\n\n이 텍스트는 임상 노트입니까? (예/아니오)"
@@ -70,6 +69,37 @@ def check_if_clinical_note(text):
     except Exception as e:
         st.error(f"임상 노트 판별 중 오류 발생: {e}")
         return False
+
+
+# 사용자 로그를 수집하는 함수
+def save_user_log_to_s3():
+    user_log_data = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "session_id": str(uuid.uuid4()),
+        "occupation": st.session_state.get("occupation", ""),
+        "department": st.session_state.get("department", ""),
+        "structured_input": st.session_state.get("structured_input", ""),
+        "errors": st.session_state.get("errors", [])
+    }
+    
+    st.session_state['user_log_data'] = user_log_data
+    user_log_json = json.dumps(user_log_data, ensure_ascii=False)
+
+    bucket_name = "medinsurance-assist-beta-user-log"
+    file_name = f"user_logs/{user_log_data['timestamp']}_{user_log_data['session_id']}.json"
+
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=st.secrets["aws"]["access_key"],
+        aws_secret_access_key=st.secrets["aws"]["secret_key"],
+        region_name='ap-northeast-2'
+    )
+
+    try:
+        s3_client.put_object(Bucket=bucket_name, Key=file_name, Body=user_log_json)
+        # 로그 저장 성공 시 별도의 메시지를 표시하지 않아도 됩니다.
+    except Exception as e:
+        st.error(f"로그 수집 중 오류 발생: {e}")
 
 
 #예시 임상노트 데이터 사용자가 선택할 수 있게 추가
@@ -189,11 +219,11 @@ def collect_user_input():
     return occupation, other_occupation, department, user_input
 
 
-# 분과 데이터셋: 추가될 때마다 S3에 해당 버킷에 업로드하고 여기에 추가하면 됨
+# 분과 데이터셋: 추가될 때마다 업데이트 할 부분
 department_datasets = {
     "신경외과 (Neuro-Surgery)": {
         "bucket_name": "hemochat-rag-database",
-        "file_key": "18_aga_tagged_embedded_data.json.json"
+        "file_key": "18_aga_tagged_embedded_data.json"
     },
     "혈관외과 (Vascular Surgery)": {
         "bucket_name": "hemochat-rag-database",
@@ -209,7 +239,7 @@ department_datasets = {
     }
 }
 
-# 설명: 선택된 분과에 따라 s3로부터 해당 데이터셋을 로드를 요청하는 함수
+# 선택된 분과에 따라 해당 데이터셋을 로드하는 함수
 @st.cache_data
 def load_data_if_department_selected(department):
     if department in department_datasets:
@@ -229,7 +259,7 @@ def load_data_if_department_selected(department):
         st.warning(f"현재 {department}에 대한 데이터셋은 준비 중입니다.")
         return []
 
-# 설명: AWS S3에서 임베딩 데이터를 로드하는 함수
+# AWS S3에서 임베딩 데이터를 로드하는 함수
 def load_data_from_s3(bucket_name, file_key):
     try:
         s3_client = boto3.client(
@@ -245,7 +275,7 @@ def load_data_from_s3(bucket_name, file_key):
         st.error(f"S3에서 데이터 로드 중 오류 발생: {e}")
         return []
 
-# 설명: JSON 형태의 데이터셋으로부터 임베딩 벡터와 메타데이터를 추출하는 함수
+# JSON에서 임베딩 벡터와 메타데이터 추출
 def extract_vectors_and_metadata(embedded_data):
     vectors = []
     metadatas = []
@@ -276,7 +306,7 @@ def extract_vectors_and_metadata(embedded_data):
     
     return vectors, metadatas
 
-# 입력: 사용자 입력을 진단명, 치료행위, 치료재료 등으로 구조화하는 함수
+# 사용자 입력을 구조화하는 함수
 def structure_user_input(user_input):
     try:
         prompt_template = st.secrets["openai"]["prompt_structuring"]
@@ -299,7 +329,7 @@ def structure_user_input(user_input):
         st.error(f"입력 구조화 중 오류 발생: {e}")
         return None
 
-# 설명: 사용자 입력을 구조화한 텍스트의 일부를 OpenAI 임베딩 모델로 임베딩하는 함수
+# 사용자 입력을 임베딩하는 함수
 def get_embedding_from_openai(text):
     try:
         response = openai.Embedding.create(
@@ -311,7 +341,7 @@ def get_embedding_from_openai(text):
         st.error(f"임베딩 생성 중 오류 발생: {e}")
         return None
 
-# 설명: 코사인 유사도를 계산하여 상위 5개의 결과를 반환하는 함수로, 임베딩 결과에 따라 이 함수의 리턴도 달라짐
+# 코사인 유사도를 계산하여 상위 N개 결과 반환
 def find_top_n_similar(embedding, vectors, metadatas, top_n=5):
     if len(vectors) != len(metadatas):
         st.error(f"벡터 수와 메타데이터 수가 일치하지 않습니다: 벡터 수 = {len(vectors)}, 메타데이터 수 = {len(metadatas)}")
@@ -325,8 +355,7 @@ def find_top_n_similar(embedding, vectors, metadatas, top_n=5):
     
     return top_results
 
-
-# 설명: GPT-4o-mini 모델을 사용하여 상위 5개에서 2차로 연관성 점수를 평가하는 함수
+# GPT-4 모델을 사용하여 연관성 점수를 평가하는 함수
 def evaluate_relevance_with_gpt(structured_input, items):
     try:
         prompt_template = st.secrets["openai"]["prompt_scoring"]
@@ -340,7 +369,7 @@ def evaluate_relevance_with_gpt(structured_input, items):
                     {"role": "system", "content": "당신은 도움이 되는 어시스턴트입니다."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=500,
+                max_tokens=100,
                 temperature=0.7,
             )
 
@@ -351,8 +380,7 @@ def evaluate_relevance_with_gpt(structured_input, items):
         st.error(f"GPT 모델 호출 중 오류 발생: {e}")
         return None
 
-
-# 설명: gpt가 스코어링한 연관성 점수를 추출하는 함수
+# 점수 추출 함수
 def extract_scores(full_response, num_items):
     scores = {}
     for idx in range(1, num_items + 1):
@@ -361,7 +389,7 @@ def extract_scores(full_response, num_items):
             scores[idx] = int(score_match.group(1))
     return scores if len(scores) == num_items else None  # 모든 스코어를 추출하지 못하면 None 반환
 
-# 설명: 스코어 추출 실패 시 재시도하는 함수로, gpt 응답이 대체로 일관된 형식이나 가끔 다른 형태로 주어질 때가 있음. 7점 이상 없으면 점수를 다시 매기게 호출함.
+# 재시도 케이스: 스코어 추출 실패 시 재시도
 def retry_scoring_gpt(structured_input, items):
     if st.session_state.score_parsing_attempt < st.session_state.max_attempts:
         st.session_state.score_parsing_attempt += 1
@@ -373,7 +401,7 @@ def retry_scoring_gpt(structured_input, items):
         st.warning("스코어 추출에 여러 번 실패했습니다. '삭감 여부 확인' 버튼을 다시 눌러주세요.")
         return None
 
-# 설명: 연관된 항목, 즉 7점 이상인 항목이 없는 경우 임베딩 및 검색 재시도하는 함수
+# 재시도 케이스: 연관된 항목이 없는 경우 임베딩 및 검색 재시도
 def retry_embedding_and_search(department, user_input, vectors, metadatas):
     if st.session_state.embedding_search_attempt < st.session_state.max_attempts:
         st.session_state.embedding_search_attempt += 1
@@ -421,7 +449,7 @@ def retry_embedding_and_search(department, user_input, vectors, metadatas):
         st.warning("임베딩 및 검색 재시도 횟수를 초과했습니다.")
         return False
 
-# 설명: 재시도 횟수를 기록하고, 재시도 횟수가 최대 재시도 횟수를 초과하면 경고 메시지를 표시하고 재시도를 중단하는 함수
+# 재시도 로직 처리 함수
 def handle_retries(department, user_input):
     if st.session_state.retry_attempts >= st.session_state.max_attempts:
         st.warning("죄송합니다. 응답 과정에서 문제가 발생했습니다. 다시 시도하려면 '삭감 여부 확인' 버튼을 한 번 더 눌러주세요.")
@@ -467,7 +495,7 @@ def handle_retries(department, user_input):
             handle_retries(department, user_input)
 
 
-# 설명: 상위 5개의 결과를 표시하고, 연관성을 평가함수를 호출해 결가를 보여줌.
+# 검색 결과 및 분석 결과를 출력하는 함수
 def display_results(embedding, vectors, metadatas, structured_input):
     top_results = find_top_n_similar(embedding, vectors, metadatas)
     st.subheader("상위 유사 항목")
@@ -513,7 +541,6 @@ def display_results(embedding, vectors, metadatas, structured_input):
         return None, None
 
 
-# 설명: 사용자 입력을 구조화한 결과에서 진단명부터 수술 관련 기록 이전까지의 내용만 추출하는 함수. 이 결과를 임베딩하여 검색을 돌림.
 def extract_text_between_numbers(structured_input):
     import re
     # 정규표현식을 사용하여 "2."와 "6." 사이의 텍스트를 추출
@@ -526,7 +553,7 @@ def extract_text_between_numbers(structured_input):
         return None
 
 
-# 설명: 사용자 입력을 처리(구조화)하고, 필요한 부분을 추출하여 OpenAI 임베딩 모델로 임베딩을 생성하는 함수
+# 사용자 입력 처리 및 임베딩 생성
 def process_user_input(user_input):
     try:
         with st.spinner("사용자 입력 분석중..."):
@@ -560,7 +587,7 @@ def process_user_input(user_input):
         st.session_state.setdefault('errors', []).append(error_message)
         return None, None
 
-# 설명: 최종적으로 연관되었다고 평가된 유효 기준에 대한 세부적인 분석과 심사
+# 유효 기준에 대한 세부적인 분석과 심사
 def analyze_criteria(relevant_results, user_input):
     explanations = []
     overall_decision = "삭감 안될 가능성 높음"
@@ -607,7 +634,6 @@ def analyze_criteria(relevant_results, user_input):
     progress_bar.empty()
     return overall_decision, explanations
 
-# 설명: 최종 심사 결과와 근거를 사용하여 업그레이드된 임상 노트를 생성하는 함수
 def display_results_and_analysis():
     if st.session_state.get('results_displayed', False):
         # 기존 판정 결과 표시
@@ -635,32 +661,16 @@ def display_results_and_analysis():
                 upgraded_note = st.session_state['upgraded_note']
                 note_area = st.text_area("업그레이드된 임상노트", value=upgraded_note, height=300)
                 
-                if st.button("임상노트 복사하기"):
-                    # upgraded_note 값을 올바르게 format에 전달
-                    # HTML과 JavaScript를 사용하여 클립보드 복사 기능 구현
-                    components.html(f"""
-                        <script>
-                            function copyToClipboard() {{
-                                var text = `{upgraded_note}`;
-                                navigator.clipboard.writeText(text).then(function() {{
-                                    alert("임상노트가 클립보드에 복사되었습니다.");
-                                }}, function(err) {{
-                                    console.error("텍스트 복사 실패", err);
-                                }});
-                            }}
-                            copyToClipboard();
-                        </script>
-                    """, height=0)
             else:
                 st.write("업그레이드된 임상노트를 생성하는 중 문제가 발생했습니다.")
 
 
 
-# 설명: 이전 대화 내용을 저장하는 함수
+# 채팅 기능 추가: 이전 내용들을 대화 내역에 추가하는 함수
 def add_to_conversation(role, message):
     st.session_state.conversation.append({"role": role, "message": message})
 
-# 설명: 대화 메시지를 표시하는 함수
+# 대화 메시지를 표시하는 함수
 def display_chat_messages():
     for chat in st.session_state.conversation:
         if chat['role'] == 'user':
@@ -670,7 +680,7 @@ def display_chat_messages():
             with st.chat_message("assistant"):
                 st.markdown(chat['message'])
 
-# 설명: 채팅 인터페이스를 표시하는 함수
+# 채팅 인터페이스를 Sidebar에 표시하는 함수
 def display_chat_interface():
     with st.sidebar:
         st.header("AI Assistant와 채팅을 시작해보세요.")
@@ -690,7 +700,7 @@ def display_chat_interface():
                 with st.chat_message("assistant"):
                     st.markdown(model_response)
 
-# 설명: 채팅에서 응답을 생성하는 함수
+# 채팅에서 응답을 생성하는 함수
 def generate_chat_response(user_question):
     try:
         # 이전의 컨텍스트 가져오기 (최근 10개 메시지만)
@@ -734,7 +744,7 @@ def generate_chat_response(user_question):
         return "죄송합니다. 요청을 처리하는 중 문제가 발생했습니다."
 
 
-# 설명: 사용자가 보내는 피드백을 S3에 저장하도록 하는 함수
+# 피드백 저장 함수
 def save_feedback_to_s3():
     
     # 세션 상태에서 기존의 사용자 로그 데이터를 가져옴
@@ -768,7 +778,7 @@ def save_feedback_to_s3():
         st.error(f"피드백 저장 중 오류 발생: {e}")
 
 
-# 설명: 피드백 입력창 UI를 표시하는 함수
+# 피드백 입력창 추가
 def feedback_section():
     with st.sidebar:
         # HTML과 CSS를 이용해 서브헤더 스타일 조정
@@ -796,7 +806,7 @@ def feedback_section():
                 st.success("피드백이 전송되었습니다. 감사합니다!")
 
 
-# 설명: 최종 판정 결과에 따라 업그레이드된 임상노트를 생성하는 함수
+# 업그레이드된 임상노트를 생성하는 함수
 def generate_upgraded_clinical_note(overall_decision, user_input, explanations):
     try:
         prompt_template = st.secrets["openai"]["prompt_upgrade_note"]
@@ -842,10 +852,10 @@ def generate_upgraded_clinical_note(overall_decision, user_input, explanations):
         return None
 
 
-# 설명: 메인 함수
+# 메인 함수
 def main():
     add_logo()
-    st.title("의료비 삭감 판정 어시스트 - 삭감노노.com")
+    st.title("의료비 삭감 판정 어시스트 - <삭감노노>")
 
     # 1. 사용자 정보 및 입력 수집
     occupation, other_occupation, department, user_input = collect_user_input()
