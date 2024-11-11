@@ -70,47 +70,55 @@ def check_if_clinical_note(text):
         return False
 
 
-# 설명: 사용자 로그를 수집하는 함수
-def save_user_log_to_s3():
-    user_log_data = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "session_id": str(uuid.uuid4()),
-        "occupation": st.session_state.get("occupation", ""),
-        "department": st.session_state.get("department", ""),
-        "structured_input": st.session_state.get("structured_input", ""),
-        "errors": st.session_state.get("errors", [])
-    }
-    
-    st.session_state['user_log_data'] = user_log_data
-    user_log_json = json.dumps(user_log_data, ensure_ascii=False)
+#예시 임상노트 데이터 사용자가 선택할 수 있게 추가
+demo_clinical_notes = {
+    "신경외과-사례1": ("신경외과 (Neuro-Surgery)", "왼쪽 종아리가 당긴지 13일 된 환자인데 다른 병원에서 처방받은 약으로 보존적 치료했는데 효과가 없었다. 환자는 내원 당시 엄지발가락의 근력이 4로 저하되어 있었다. 요추 MRI를 본원에서 2023년 7월 14일에 촬영하였고 요추 4-5번간 디스크 파열 및 추간판 탈출로 인한 신경근 압박 소견이 확인 되었다.  근력 저하를 근거로 디스크 제거술을 2023년 7월 15일에 진행하였다."),
+    "혈관외과-사례1": ("혈관외과 (Vascular Surgery)", "남/50세. 수술전후 진단: Obstruction of AVBG, Lt.upperarm. 수술명: Open Thrombectomy, Segmental resection of stenosis area, Jump graft- Anesthesia:General. Op Finding-1) GVA stenosis에 의한 폐쇄로 보임. 2) GVA 상방 Axillary vein에 new graft 연결. 3) Upperarm straight graft임."),
+    "대장항문외과-사례1": ("대장항문외과 (Colorectal Surgery)", "대장항문외과 환자의 임상 노트 예시입니다."),
+    "정맥경장영양-사례1": ("정맥경장영양 (TPN)", "남/49세, 9일 전 입원. 8일 전 췌장암 두부 절제 후 단백아미노제재 TPN 1일 1회, 총 4회 투여.")
+}
 
-    bucket_name = "medinsurance-assist-beta-user-log"
-    file_name = f"user_logs/{user_log_data['timestamp']}_{user_log_data['session_id']}.json"
+# 콜백을 사용해서 selectbox 예시노트 선택시 자동으로 text_area, department 업데이트를 UI로 반영해주는 함수
+def update_example_note():
+    selected_example = st.session_state['selected_example']
+    if selected_example != "없음":
+        department, example_note = demo_clinical_notes[selected_example]
+        st.session_state['user_input'] = example_note
+        st.session_state['department'] = department
 
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=st.secrets["aws"]["access_key"],
-        aws_secret_access_key=st.secrets["aws"]["secret_key"],
-        region_name='ap-northeast-2'
+# 사용자 정보 및 입력을 수집하는 함수
+def collect_user_input():    
+    # 예시 임상노트를 선택하는 경우에 대한 부분 추가
+    st.subheader("예시 임상노트 선택")
+    st.selectbox(
+        "아래에서 예시 임상노트를 선택하세요:",
+        ["없음"] + list(demo_clinical_notes.keys()),
+        key="selected_example",
+        on_change=update_example_note
     )
 
-    try:
-        s3_client.put_object(Bucket=bucket_name, Key=file_name, Body=user_log_json)
-        # 로그 저장 성공 시 별도의 메시지를 표시하지 않아도 됩니다.
-    except Exception as e:
-        st.error(f"로그 수집 중 오류 발생: {e}")
+    if 'user_input' not in st.session_state:
+        st.session_state['user_input'] = ""
 
-# 설명: 사용자의 입력, 직업과 분과를 수집하는 함수
-def collect_user_input():
-    user_input = st.text_area("", height=500, placeholder="SOAP 등의 임상기록 및 치료 방법 (약물,시술,수술) 등을 입력해주세요.")
+    user_input = st.text_area(
+        "",
+        height=500,
+        value=st.session_state.get('user_input', ""),
+        placeholder="SOAP 등의 임상기록 및 치료 방법 (약물, 시술, 수술) 등을 입력해주세요.",
+        key='user_input'
+    )
+
+    if user_input != st.session_state['user_input']:
+        st.session_state['user_input'] = user_input
+
     if user_input:
         with st.spinner("임상 노트 여부 확인 중..."):
             is_clinical_note = check_if_clinical_note(user_input)
         if not is_clinical_note:
             st.warning("입력한 텍스트가 임상노트가 아닙니다. 텍스트를 확인해주세요.")
         else:
-            st.session_state.user_input = user_input
             st.session_state.is_clinical_note = True
+
     st.subheader("어떤 분야에 종사하시나요?")
     occupation = st.radio(
         "직업을 선택하세요:",
@@ -123,23 +131,28 @@ def collect_user_input():
     else:
         other_occupation = None
 
-    department = None
-    if occupation:
-        st.subheader("어떤 분과에 재직 중인지 알려주세요.")
-        department = st.selectbox(
-            "분과를 선택하세요:",
-            options=[
-                "신경외과 (Neuro-Surgery)",
-                "혈관외과 (Vascular Surgery)",
-                "대장항문외과 (Colorectal Surgery)",
-                "정맥경장영양 (TPN)"
-            ]
-        )
+    # Department 초기화 확인 및 선택창
+    if 'department' not in st.session_state:
+        st.session_state['department'] = ""
+
+    department_options = [
+        "신경외과 (Neuro-Surgery)",
+        "혈관외과 (Vascular Surgery)",
+        "대장항문외과 (Colorectal Surgery)",
+        "정맥경장영양 (TPN)"
+    ]
+
+    st.subheader("어떤 분과에 재직 중인지 알려주세요.")
+    department = st.selectbox(
+        "분과를 선택하세요:",
+        options=department_options,
+        index=0 if st.session_state['department'] == "" else department_options.index(st.session_state['department']),
+        key='department'  # 세션 상태와 연동
+    )
 
     # 세션 상태에 사용자 정보 저장
     st.session_state['occupation'] = occupation
     st.session_state['other_occupation'] = other_occupation
-    st.session_state['department'] = department
 
     # 체크박스 크기 조절을 위한 CSS
     st.markdown("""
@@ -172,6 +185,7 @@ def collect_user_input():
     st.session_state['button_disabled'] = not agree_to_collect
 
     return occupation, other_occupation, department, user_input
+
 
 # 분과 데이터셋: 추가될 때마다 S3에 해당 버킷에 업로드하고 여기에 추가하면 됨
 department_datasets = {
