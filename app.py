@@ -15,6 +15,89 @@ st.set_page_config(
     layout="wide",  # 창 전체를 사용하도록 설정
 )
 
+#예시 임상노트 데이터 사용자가 선택할 수 있게 추가
+demo_clinical_notes = {
+    "신경외과-사례1": ("신경외과 (Neuro-Surgery)", ''' 
+1달 전 무거운 것 들다가 
+우측 엉치 통증 발생
+우측 종아리, 발바닥 전체가 쥐난다
+
+타원에서
+Nerve block 2차례
+효과가 미미하다
+
+이젠 걷기가 힘들다
+
+VAS 7-8
+
+Hip Flexion, III/V 
+Knee Extension, V/V 
+ADF, III/V
+GTE, V/V
+APF, V/V 
+
+SLR +/-
+
+A)
+HNP L5/S1 Rt 
+
+P)
+discectomy L5/S1 Rt'''),
+    "혈관외과-사례1": ("혈관외과 (Vascular Surgery)", '''
+1달 전 혈액투석 중
+좌측 상완에 부종 및 통증 발생
+혈액 투석 시 혈류 불량으로 투석 어려움
+
+타원에서
+혈관 도플러 검사 진행
+혈관 협착 및 폐쇄 진단
+
+현재는 투석 시 통증 심화 및 팔 부종 지속
+
+VAS 6-7
+
+상완 부위 촉진 시 부종 및 통증
+AVBG 도플러 검사: 혈류 저하 소견
+
+A)
+Obstruction of AVBG, Lt. upper arm (GVA Stenosis)
+
+P)
+Open Thrombectomy, Segmental resection of stenosis area, Jump graft'''),
+    "대장항문외과-사례1": ("대장항문외과 (Colorectal Surgery)", '''
+1달 전부터 발생한 RLQ pain으로 내원함
+underlying dz(-)
+OPHx(-)
+
+Td/RTd(+/+) : RLQ
+
+외부 U/S)
+appendiceal wall thickening, max diameter 16mm
+
+A) 
+Acute appendicitis
+
+P)
+Appendectomy
+'''),
+    "정맥경장영양-사례1": ("정맥경장영양 (TPN)", '''
+남 49세
+
+9일 전 입원. 
+
+8일 전 췌장암 두부 절제 후 단백아미노제재 TPN 1L 1일 1회
+
+총 4회 투여.''')
+}
+
+department_options = [
+    "신경외과 (Neuro-Surgery)",
+    "혈관외과 (Vascular Surgery)",
+    "대장항문외과 (Colorectal Surgery)",
+    "정맥경장영양 (TPN)"
+]
+
+
 # 세션 상태 변수 초기화
 def initialize_session_state():
     session_state_defaults = {
@@ -34,7 +117,17 @@ def initialize_session_state():
         'scores': {},
         'retry_attempts': 0,
         'upgraded_note': None,
-        'copy_text': ''
+        'copy_text': '',
+        'department': department_options[0],
+        'selected_example': "없음",
+        'occupation': '',
+        'other_occupation': '',
+        'structured_input': '',
+        'errors': [],
+        'embedding': None,
+        'agree_to_collect': False,
+        'button_disabled': True,
+        'visitor_counted': False
     }
     for key, value in session_state_defaults.items():
         if key not in st.session_state:
@@ -76,10 +169,10 @@ def save_user_log_to_s3():
     user_log_data = {
         "timestamp": datetime.utcnow().isoformat(),
         "session_id": str(uuid.uuid4()),
-        "occupation": st.session_state.get("occupation", ""),
-        "department": st.session_state.get("department", ""),
-        "structured_input": st.session_state.get("structured_input", ""),
-        "errors": st.session_state.get("errors", [])
+        "occupation": st.session_state["occupation"],
+        "department": st.session_state["department"],
+        "structured_input": st.session_state["structured_input"],
+        "errors": st.session_state["errors"]
     }
     
     st.session_state['user_log_data'] = user_log_data
@@ -88,12 +181,7 @@ def save_user_log_to_s3():
     bucket_name = "medinsurance-assist-beta-user-log"
     file_name = f"user_logs/{user_log_data['timestamp']}_{user_log_data['session_id']}.json"
 
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=st.secrets["aws"]["access_key"],
-        aws_secret_access_key=st.secrets["aws"]["secret_key"],
-        region_name='ap-northeast-2'
-    )
+    s3_client = create_s3_client()
 
     try:
         s3_client.put_object(Bucket=bucket_name, Key=file_name, Body=user_log_json)
@@ -102,20 +190,6 @@ def save_user_log_to_s3():
         st.error(f"로그 수집 중 오류 발생: {e}")
 
 
-#예시 임상노트 데이터 사용자가 선택할 수 있게 추가
-demo_clinical_notes = {
-    "신경외과-사례1": ("신경외과 (Neuro-Surgery)", "왼쪽 종아리가 당긴지 13일 된 환자인데 다른 병원에서 처방받은 약으로 보존적 치료했는데 효과가 없었다. 환자는 내원 당시 엄지발가락의 근력이 4로 저하되어 있었다. 요추 MRI를 본원에서 2023년 7월 14일에 촬영하였고 요추 4-5번간 디스크 파열 및 추간판 탈출로 인한 신경근 압박 소견이 확인 되었다.  근력 저하를 근거로 디스크 제거술을 2023년 7월 15일에 진행하였다."),
-    "혈관외과-사례1": ("혈관외과 (Vascular Surgery)", "남/50세. 수술전후 진단: Obstruction of AVBG, Lt.upperarm. 수술명: Open Thrombectomy, Segmental resection of stenosis area, Jump graft- Anesthesia:General. Op Finding-1) GVA stenosis에 의한 폐쇄로 보임. 2) GVA 상방 Axillary vein에 new graft 연결. 3) Upperarm straight graft임."),
-    "대장항문외과-사례1": ("대장항문외과 (Colorectal Surgery)", "대장항문외과 환자의 임상 노트 예시입니다."),
-    "정맥경장영양-사례1": ("정맥경장영양 (TPN)", "남/49세, 9일 전 입원. 8일 전 췌장암 두부 절제 후 단백아미노제재 TPN 1일 1회, 총 4회 투여.")
-}
-
-department_options = [
-    "신경외과 (Neuro-Surgery)",
-    "혈관외과 (Vascular Surgery)",
-    "대장항문외과 (Colorectal Surgery)",
-    "정맥경장영양 (TPN)"
-]
 
 
 # 콜백을 사용해서 selectbox 예시노트 선택시 자동으로 text_area, department 업데이트를 UI로 반영해주는 함수
@@ -130,7 +204,7 @@ def update_example_note():
         st.session_state['department'] = department_options[0]
 
 # 사용자 정보 및 입력을 수집하는 함수
-def collect_user_input():    
+def choose_demo_clinical_note():    
     # 예시 임상노트를 선택하는 경우에 대한 부분 추가
     st.subheader("예시 임상노트 선택")
     st.selectbox(
@@ -140,17 +214,22 @@ def collect_user_input():
         on_change=update_example_note
     )
 
-    if 'user_input' not in st.session_state:
-        st.session_state['user_input'] = ""
+    # 이 부분에서 user_input이 session_state 에 없을 시,
+    # session_state에 user_input을 추가하고, user_input을 빈 문자열로 초기화하는 함수가 있었음
+    # 어차피 코드 실행 직후에 initializing 함수가 실행되므로
+    # redundant한 두 줄을 제거해버림
 
+def get_user_clinical_note():
     user_input = st.text_area(
         "",
         height=500,
-        value=st.session_state.get('user_input', ""),
         placeholder="SOAP 등의 임상기록 및 치료 방법 (약물, 시술, 수술) 등을 입력해주세요.",
         key='user_input'
     )
+    return user_input
 
+
+def check_clinical_note_status(user_input):
     if user_input != st.session_state['user_input']:
         st.session_state['user_input'] = user_input
 
@@ -162,11 +241,14 @@ def collect_user_input():
         else:
             st.session_state.is_clinical_note = True
 
+
+def get_occupation():
     st.subheader("어떤 분야에 종사하시나요?")
     occupation = st.radio(
         "직업을 선택하세요:",
         options=["의사", "간호사", "병원내 청구팀", "기타"],
-        index=0
+        index=0,
+        key='occupation_widget'
     )
 
     if occupation == "기타":
@@ -174,30 +256,30 @@ def collect_user_input():
     else:
         other_occupation = None
 
-    # Department 초기화 확인 및 선택창
-    if 'department' not in st.session_state:
-        st.session_state['department'] = department_options[0]
+    return occupation, other_occupation
 
-
+def get_department():
+    # Department 초기화 확인 및 선택창, 어차피 초기화 함수가 있으므로 제거해도 되는줄 알았는데 아니었다....
     st.subheader("어떤 분과에 재직 중인지 알려주세요.")
 
-    if st.session_state['department'] in department_options:
-        department_index = department_options.index(st.session_state['department'])
-    else:
-        department_index = 0
+    department_index = department_options.index(st.session_state['department']) if st.session_state['department'] in department_options else 0
 
     department = st.selectbox(
         "분과를 선택하세요:",
         options=department_options,
         index=department_index,
-        key='department_widget'
+        key='department_widget' # 세션 상태 키와 동일하게 설정
     )
 
+    return department
+
+def save_user_department_occupation(department, occupation, other_occupation):
     # 세션 상태에 사용자 정보 저장
     st.session_state['department'] = department
     st.session_state['occupation'] = occupation
     st.session_state['other_occupation'] = other_occupation
 
+def apply_custom_css_to_checkbox():
     # 체크박스 크기 조절을 위한 CSS
     st.markdown("""
     <style>
@@ -216,19 +298,19 @@ def collect_user_input():
     </style>
     """, unsafe_allow_html=True)
 
+def display_warning_without_agree():
     # 체크박스 위에 빨간색 안내 문구 추가 (체크되지 않은 경우에만 표시)
-    if not st.session_state.get('agree_to_collect', False):
+    if not st.session_state['agree_to_collect']:
         st.markdown('<div class="warning-text">약관에 동의하셔야 삭감여부 확인이 가능합니다.</div>', unsafe_allow_html=True)
 
+def handle_agreement_state():
     agree_to_collect = st.checkbox(
         "사용자 정보를 수집하는 것에 동의합니다. 사용자의 텍스트 입력은 개인정보 보호를 위해 수집되지 않으며, 수집된 정보는 일정 기간 후 파기됩니다.",
         key="agree_to_collect"
     )
-
     # '삭감 여부 확인' 버튼을 체크박스 동의 여부에 따라 활성화/비활성화
     st.session_state['button_disabled'] = not agree_to_collect
-
-    return occupation, other_occupation, department, user_input
+    return agree_to_collect
 
 
 # 분과 데이터셋: 추가될 때마다 업데이트 할 부분
@@ -252,7 +334,7 @@ department_datasets = {
 }
 
 # 선택된 분과에 따라 해당 데이터셋을 로드하는 함수
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_data_if_department_selected(department):
     if department in department_datasets:
         dataset_info = department_datasets[department]
@@ -271,21 +353,78 @@ def load_data_if_department_selected(department):
         st.warning(f"현재 {department}에 대한 데이터셋은 준비 중입니다.")
         return []
 
+
+def create_s3_client():
+    return boto3.client(
+        's3',
+        aws_access_key_id=st.secrets["aws"]["access_key"],
+        aws_secret_access_key=st.secrets["aws"]["secret_key"],
+        region_name='ap-northeast-2'
+    )
+
 # AWS S3에서 임베딩 데이터를 로드하는 함수
-def load_data_from_s3(bucket_name, file_key):
+def load_data_from_s3(bucket_name, file_key, file_type="embedding"):
     try:
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=st.secrets["aws"]["access_key"],
-            aws_secret_access_key=st.secrets["aws"]["secret_key"],
-            region_name='ap-northeast-2'
-        )
+        s3_client = create_s3_client()
         response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
         data = response['Body'].read().decode('utf-8')
-        return json.loads(data)
+        loaded_data = json.loads(data)
+    
+        # 방문자 수와 임베딩 데이터의 처리를 구분
+        if file_type == "visitor":
+            return loaded_data.get('count', 0)
+        else:
+            return loaded_data
     except Exception as e:
         st.error(f"S3에서 데이터 로드 중 오류 발생: {e}")
-        return []
+        # logging.error(f"S3에서 데이터 로드 중 오류 발생: {e}", exc_info=True)
+        return [] if file_type == "embedding" else 0
+    
+# 방문자 수 가져오기 함수
+def get_visitor_count(bucket_name, file_key):
+    return load_data_from_s3(bucket_name, file_key, file_type="visitor")
+
+# 방문자 수 업데이트 함수
+def update_visitor_count(bucket_name, file_key):
+    current_count = get_visitor_count(bucket_name, file_key)
+    new_count = current_count + 1
+
+    # 업데이트된 방문자 수를 S3에 저장
+    visitor_data = {'count': new_count}
+    try:
+        s3_client = create_s3_client()
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=file_key,
+            Body=json.dumps(visitor_data)
+        )
+        return new_count
+    except Exception as e:
+        st.error(f"방문자 수 업데이트 중 오류 발생: {e}")
+        return current_count
+
+def display_visitor_count():
+    bucket_name = "hemochat-rag-database"
+    visitor_file_key = "visitor_count.json"
+
+    if not st.session_state['visitor_counted']:
+        visitor_count = update_visitor_count(bucket_name, visitor_file_key)
+        st.session_state['visitor_counted'] = True
+    else:
+        visitor_count = get_visitor_count(bucket_name, visitor_file_key)
+
+    with st.sidebar:
+        st.markdown(f"""
+        <style>
+        .total-visitor {{
+            font-size: 12px;
+            color: #000000;
+            margin-bottom: 10px;
+        }}
+        </style>
+        <p class="total-visitor">Total 방문자 수: {visitor_count}</p>
+        """, unsafe_allow_html=True)
+
 
 # JSON에서 임베딩 벡터와 메타데이터 추출
 def extract_vectors_and_metadata(embedded_data):
@@ -300,6 +439,13 @@ def extract_vectors_and_metadata(embedded_data):
     for idx, item in enumerate(embedded_data):
         if isinstance(item, dict):
             if all(key in item for key in ['임베딩', '제목', '요약', '세부인정사항']):
+                embedding = item['임베딩']
+                if not isinstance(embedding, list):
+                    st.warning(f"임베딩 데이터가 리스트 형식이 아닙니다 (인덱스 {idx}): {embedding}")
+                    continue
+                if not all(isinstance(x, (int, float)) for x in embedding):
+                    st.warning(f"임베딩에 숫자가 아닌 값이 있습니다. (인덱스 {idx}")
+                    continue
                 try:
                     vectors.append(np.array(item['임베딩']))
                     metadatas.append({
@@ -309,7 +455,6 @@ def extract_vectors_and_metadata(embedded_data):
                     })
                 except (TypeError, ValueError) as e:
                     st.warning(f"임베딩 데이터를 배열로 변환하는 중 오류 발생 (인덱스 {idx}): {e}")
-                    st.write(f"문제가 있는 임베딩 데이터 내용: {item['임베딩']}")
                     continue
             else:
                 st.warning(f"필수 키가 누락된 아이템 발견 (인덱스 {idx}): {item}")
@@ -368,7 +513,7 @@ def find_top_n_similar(embedding, vectors, metadatas, top_n=5):
     return top_results
 
 # GPT-4 모델을 사용하여 연관성 점수를 평가하는 함수
-def evaluate_relevance_with_gpt(structured_input, items):
+def evaluate_relevance_score_with_gpt(structured_input, items):
     try:
         prompt_template = st.secrets["openai"]["prompt_scoring"]
         formatted_items = "\n\n".join([f"항목 {i+1}: {item['요약']}" for i, item in enumerate(items)])
@@ -401,13 +546,21 @@ def extract_scores(full_response, num_items):
             scores[idx] = int(score_match.group(1))
     return scores if len(scores) == num_items else None  # 모든 스코어를 추출하지 못하면 None 반환
 
+
+# 변수의 초기화와 갱신을 한 곳에서 관리하도록 수정
+def reset_retry_states():
+    st.session_state['retry_attempts'] = 0
+    st.session_state['retry_type'] = None
+    st.session_state['score_parsing_attempt'] = 0
+    st.session_state['embedding_search_attempt'] = 0
+
 # 재시도 케이스: 스코어 추출 실패 시 재시도
 def retry_scoring_gpt(structured_input, items):
     if st.session_state.score_parsing_attempt < st.session_state.max_attempts:
         st.session_state.score_parsing_attempt += 1
         st.warning(f"스코어 추출에 실패했습니다. 스코어링 GPT를 다시 호출합니다... (시도 {st.session_state.score_parsing_attempt}/{st.session_state.max_attempts})")
         # 스코어링 GPT 다시 호출
-        new_response = evaluate_relevance_with_gpt(structured_input, items)
+        new_response = evaluate_relevance_score_with_gpt(structured_input, items)
         return new_response
     else:
         st.warning("스코어 추출에 여러 번 실패했습니다. '삭감 여부 확인' 버튼을 다시 눌러주세요.")
@@ -518,7 +671,7 @@ def display_results(embedding, vectors, metadatas, structured_input):
 
     items = [result['메타데이터'] for result in top_results]
 
-    full_response = evaluate_relevance_with_gpt(structured_input, items)
+    full_response = evaluate_relevance_score_with_gpt(structured_input, items)
 
     if full_response:
         scores = extract_scores(full_response, len(items))
@@ -596,7 +749,7 @@ def process_user_input(user_input):
         error_message = f"사용자 입력 처리 중 오류 발생: {e}"
         st.error(error_message)
         st.exception(e)
-        st.session_state.setdefault('errors', []).append(error_message)
+        st.session_state['errors'].append(error_message)
         return None, None
 
 # 유효 기준에 대한 세부적인 분석과 심사
@@ -647,7 +800,7 @@ def analyze_criteria(relevant_results, user_input):
     return overall_decision, explanations
 
 def display_results_and_analysis():
-    if st.session_state.get('results_displayed', False):
+    if st.session_state['results_displayed']:
         # 기존 판정 결과 표시
         st.subheader("심사 결과")
         st.write(st.session_state.overall_decision)
@@ -675,7 +828,6 @@ def display_results_and_analysis():
                 
             else:
                 st.write("업그레이드된 임상노트를 생성하는 중 문제가 발생했습니다.")
-
 
 
 # 채팅 기능 추가: 이전 내용들을 대화 내역에 추가하는 함수
@@ -870,11 +1022,19 @@ def main():
     st.title("의료비 삭감 판정 어시스트 - <삭감노노>")
 
     # 1. 사용자 정보 및 입력 수집
-    occupation, other_occupation, department, user_input = collect_user_input()
+    choose_demo_clinical_note()
+    user_input = get_user_clinical_note()
+    check_clinical_note_status(user_input)
+    occupation, other_occupation = get_occupation()
+    department = get_department()
+    save_user_department_occupation(department, occupation, other_occupation)
+    apply_custom_css_to_checkbox()
+    display_warning_without_agree()
+    handle_agreement_state()
 
     # 2. '삭감 여부 확인' 버튼 클릭 시 초기화 및 재시도 시작
-    if st.button("삭감 여부 확인", disabled=st.session_state.get('button_disabled', True)):
-        if not st.session_state.get('agree_to_collect', False):
+    if st.button("삭감 여부 확인", disabled=st.session_state['button_disabled']):
+        if not st.session_state['agree_to_collect']:
             st.warning("사용자 정보 수집에 동의해야 합니다.")
         elif not st.session_state.is_clinical_note:
             st.warning("유효한 임상노트를 입력해주세요.")
@@ -882,17 +1042,14 @@ def main():
             st.warning("분과를 선택해주세요.")
         else:
             save_user_log_to_s3()
+            reset_retry_states()
             st.session_state.conversation = []
             st.session_state.results_displayed = False
-            st.session_state.score_parsing_attempt = 0
-            st.session_state.embedding_search_attempt = 0
             st.session_state.overall_decision = ""
             st.session_state.explanations = []
             st.session_state.relevant_results = []
             st.session_state.full_response = ""
             st.session_state.scores = {}
-            st.session_state.retry_type = None  # 재시도 유형 초기화
-            st.session_state.retry_attempts = 0
             st.session_state.upgraded_note = None
             st.session_state.copy_text = ''
 
@@ -943,6 +1100,10 @@ def main():
     display_chat_interface()
 
     feedback_section()
+
+    display_visitor_count()
+
+
 
 if __name__ == "__main__":
     main()
