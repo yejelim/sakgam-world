@@ -17,7 +17,7 @@ st.set_page_config(
 
 #예시 임상노트 데이터 사용자가 선택할 수 있게 추가
 demo_clinical_notes = {
-    "신경외과-사례1": ("신경외과 (Neuro-Surgery)", ''' 
+    "척추관절질환-사례1": ("척추관절질환", ''' 
 1달 전 무거운 것 들다가 
 우측 엉치 통증 발생
 우측 종아리, 발바닥 전체가 쥐난다
@@ -91,7 +91,7 @@ Appendectomy
 }
 
 department_options = [
-    "신경외과 (Neuro-Surgery)",
+    "척추관절질환",
     "혈관외과 (Vascular Surgery)",
     "대장항문외과 (Colorectal Surgery)",
     "정맥경장영양 (TPN)"
@@ -107,10 +107,10 @@ def initialize_session_state():
         'overall_decision': '',
         'explanations': [],
         'results_displayed': False,
-        'score_parsing_attempt': 0,      # 스코어 추출 재시도 횟수
+        'scoring_attempt': 0,      # 스코어 추출 재시도 횟수
         'embedding_search_attempt': 0,   # 임베딩 및 검색 재시도 횟수
         'max_attempts': 3,               # 최대 재시도 횟수
-        'retry_type': None,              # 'score_parsing' 또는 'embedding_search'
+        'retry_type': None,              # 'scoring_attempt' 또는 'embedding_search'
         'vectors': [],
         'metadatas': [],
         'full_response': '',
@@ -315,7 +315,7 @@ def handle_agreement_state():
 
 # 분과 데이터셋: 추가될 때마다 업데이트 할 부분
 department_datasets = {
-    "신경외과 (Neuro-Surgery)": {
+    "척추관절질환": {
         "bucket_name": "hemochat-rag-database",
         "file_key": "18_aga_tagged_embedded_data.json"
     },
@@ -515,6 +515,9 @@ def find_top_n_similar(embedding, vectors, metadatas, top_n=5):
 # GPT-4 모델을 사용하여 연관성 점수를 평가하는 함수
 def evaluate_relevance_score_with_gpt(structured_input, items):
     try:
+        # 점수 추출 시도 횟수 추가
+        st.session_state.scoring_attempt += 1
+
         prompt_template = st.secrets["openai"]["prompt_scoring"]
         formatted_items = "\n\n".join([f"항목 {i+1}: {item['요약']}" for i, item in enumerate(items)])
         prompt = prompt_template.format(user_input=structured_input, items=formatted_items)
@@ -534,7 +537,7 @@ def evaluate_relevance_score_with_gpt(structured_input, items):
         return result
 
     except Exception as e:
-        st.error(f"GPT 모델 호출 중 오류 발생: {e}")
+        st.error(f"스코어 추출을 위한 GPT 모델 호출 중 오류 발생: {e}")
         return None
 
 # 점수 추출 함수
@@ -551,14 +554,14 @@ def extract_scores(full_response, num_items):
 def reset_retry_states():
     st.session_state['retry_attempts'] = 0
     st.session_state['retry_type'] = None
-    st.session_state['score_parsing_attempt'] = 0
+    st.session_state['scoring_attempt'] = 0
     st.session_state['embedding_search_attempt'] = 0
 
 # 재시도 케이스: 스코어 추출 실패 시 재시도
 def retry_scoring_gpt(structured_input, items):
-    if st.session_state.score_parsing_attempt < st.session_state.max_attempts:
-        st.session_state.score_parsing_attempt += 1
-        st.warning(f"스코어 추출에 실패했습니다. 스코어링 GPT를 다시 호출합니다... (시도 {st.session_state.score_parsing_attempt}/{st.session_state.max_attempts})")
+    if st.session_state.scoring_attempt < st.session_state.max_attempts:
+        st.session_state.scoring_attempt += 1
+        st.warning(f"스코어 추출에 실패했습니다. 스코어링 GPT를 다시 호출합니다... (시도 {st.session_state.scoring_attempt}/{st.session_state.max_attempts})")
         # 스코어링 GPT 다시 호출
         new_response = evaluate_relevance_score_with_gpt(structured_input, items)
         return new_response
@@ -623,7 +626,7 @@ def handle_retries(department, user_input):
 
     st.session_state.retry_attempts += 1  # 재시도 횟수 증가
 
-    if st.session_state.retry_type == 'score_parsing':
+    if st.session_state.retry_type == 'scoring_attempt':
         new_response = retry_scoring_gpt(st.session_state.structured_input, st.session_state.metadatas)
         if new_response:
             scores = extract_scores(new_response, len(st.session_state.metadatas))
@@ -677,7 +680,7 @@ def display_results(embedding, vectors, metadatas, structured_input):
         scores = extract_scores(full_response, len(items))
         if not scores:
             st.warning("스코어 추출에 실패했습니다. 스코어링 GPT를 다시 호출합니다.")
-            st.session_state.retry_type = 'score_parsing'
+            st.session_state.retry_type = 'scoring_attempt'
             return [], full_response
         else:
             st.session_state.full_response = full_response
