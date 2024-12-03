@@ -1,6 +1,6 @@
 # Streamlit
 streamlit==1.38.0
-transformers
+transformers==4.33.0
 torch
 
 # OpenAI API
