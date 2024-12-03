@@ -1090,6 +1090,7 @@ def generate_upgraded_clinical_note(overall_decision, user_input, explanations):
 # 메인 함수
 def main():
     add_logo()
+    select_language()
     st.title("의료비 삭감 판정 어시스트 - <삭감노노>")
 
     # 1. 사용자 정보 및 입력 수집
