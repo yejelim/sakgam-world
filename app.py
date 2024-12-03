@@ -74,7 +74,7 @@ LANGUAGES = {
 }
 
 # 번역 클라이언트 초기화 및 모델 로드
-@st.cache_resources
+@st.cache_resource
 def load_translation_model():
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
     tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
