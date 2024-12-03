@@ -78,6 +78,12 @@ LANGUAGES = {
 def load_translation_model():
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
     tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+    
+    # 스트림릿에서 로드하기에 모델 크기가 지나치게 크므로 양자화를 시도함
+    model = torch.quantization.quantize_dynamic(
+        model, {torch.nn.Linear}, dtype=torch.qint8
+    )
+    
     return model, tokenizer
 
 model, tokenizer = load_translation_model()
