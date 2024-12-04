@@ -326,7 +326,7 @@ def get_user_clinical_note():
     user_input = st.text_area(
         "",
         height=500,
-        placeholder=_("SOAP 등의 임상기록 및 치료 방법 (약물, 시술, 수술) 등을 입력해주세요."),
+        placeholder="Clinical Note and Therapy as SOAP etc.",
         key='user_input'
     )
     return user_input
