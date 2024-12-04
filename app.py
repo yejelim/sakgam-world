@@ -1,5 +1,5 @@
 import streamlit as st
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+import requests
 import torch
 import streamlit.components.v1 as components
 import openai
@@ -16,6 +16,9 @@ st.set_page_config(
     page_title="의료비 삭감 판정 어시스트 - beta version.",
     layout="wide",  # 창 전체를 사용하도록 설정
 )
+
+API_ENDPOINT = "http://52.78.228.225:8000/translate"
+API_KEY = "sakgam-worldwide"
 
 # 언어 선택  
 LANGUAGES = {
@@ -73,47 +76,26 @@ LANGUAGES = {
     "Slovene": "sl_SI"
 }
 
-# 번역 클라이언트 초기화 및 모델 로드
-@st.cache_resource
-def load_translation_model():
-    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-    tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-    
-    # 스트림릿에서 로드하기에 모델 크기가 지나치게 크므로 양자화를 시도함
-    model = torch.quantization.quantize_dynamic(
-        model, {torch.nn.Linear}, dtype=torch.qint8
-    )
-    
-    return model, tokenizer
-
-model, tokenizer = load_translation_model()
-
-# 번역 함수
-def translate_text(text, target_language):
+# 번역 요청 함수
+def translate_text_via_api(text, target_language):
     if target_language == "ko_KR":
-        return text # 한국어는 따로 번역하지 않음. 한국어를 default 출발 언어로 지정한 버전.
+        return text
     
-    tokenizer.src_lang = "ko_KR" # 소스 언어 한국어로 고정
-    encoded = tokenizer(text, return_tensors="pt")
-
-    generated_tokens = model.generate(
-        **encoded,
-        forced_bos_token_id=tokenizer.lang_code_to_id[target_language]
-    )
-    translated_text = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
-    return translated_text
-
-
-# 번역 캐싱 함수
-@st.cache_data(ttl=3600)
-def get_translated_text(text, target_language):
-    return translate_text(text, target_language)
-
-# 헬퍼 함수
-def _(text):
-    lang = st.session_state.get('language', 'ko_KR') # 소스 언어 한국어
-    return get_translated_text(text, lang)
-
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {API_KEY}",
+    }
+    payload = {
+        "text": text,
+        "target_language": target_language,
+    }
+    try:
+        response = requests.post(API_ENDPOINT, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json().get("translated_text", "Translation Failure")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error during API request: {e}")
+        return "Translation Failure (API Error)"
 
 # 언어 선택 위젯
 def select_language():
@@ -122,9 +104,19 @@ def select_language():
         selected_language = st.selectbox(
             "Choose your language:",
             options=list(LANGUAGES.keys()),
-            index=0
+            index=0,
         )
         st.session_state['language'] = LANGUAGES[selected_language]
+
+# 번역 캐싱 함수
+@st.cache_data(ttl=3600)
+def get_translated_text(text, target_language):
+    return translate_text_via_api(text, target_language)
+
+# 헬퍼 함수
+def _(text):
+    lang = st.session_state.get('language', 'ko_KR')  # 기본값은 한국어
+    return get_translated_text(text, lang)
 
 #예시 임상노트 데이터 사용자가 선택할 수 있게 추가
 demo_clinical_notes = {
