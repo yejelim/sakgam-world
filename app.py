@@ -250,7 +250,7 @@ def add_logo():
 # 임상 노트 여부 확인 함수
 def check_if_clinical_note(text):
     try:
-        prompt = _("다음 텍스트가 임상 노트인지 여부를 판단해주세요:\n\n") + text + "\n\n" + _("이 텍스트는 임상 노트입니까? (예/아니오)")
+        prompt = f"다음 텍스트가 임상 노트인지 여부를 판단해주세요:\n\n{text}\n\n이 텍스트는 임상 노트입니까? (예/아니오)"
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
