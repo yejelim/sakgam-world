@@ -312,7 +312,7 @@ def choose_demo_clinical_note():
     st.subheader(_("예시 임상노트 선택"))
     st.selectbox(
         _("아래에서 예시 임상노트를 선택하세요:"),
-        ["None"] + list(demo_clinical_notes.keys()),
+        ["없음"] + list(demo_clinical_notes.keys()),
         key="selected_example",
         on_change=update_example_note
     )
