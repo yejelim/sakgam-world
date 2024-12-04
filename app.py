@@ -771,7 +771,7 @@ def display_results(embedding, vectors, metadatas, structured_input):
     top_results = find_top_n_similar(embedding, vectors, metadatas)
     st.subheader(_("상위 유사 항목"))
     for idx, result in enumerate(top_results, 1):
-        with st.expander(f" {idx}. " - _(result['메타데이터']['제목'])):
+        with st.expander(f" {idx}. -" _(result['메타데이터']['제목'])):
             st.write(_("제목: ") + _(result['메타데이터']['제목']))
             st.write(_("요약: ") + _(result['메타데이터']['요약']))
 
