@@ -769,13 +769,7 @@ def handle_retries(department, user_input):
 # 검색 결과 및 분석 결과를 출력하는 함수
 def display_results(embedding, vectors, metadatas, structured_input):
     top_results = find_top_n_similar(embedding, vectors, metadatas)
-    """
-    st.subheader("Top 5 similar items")
-    for idx, result in enumerate(top_results, 1):
-        with st.expander(f" {idx}. -" + _(result['메타데이터']['제목'])):
-            st.write("Title: " + _(result['메타데이터']['제목']))
-            st.write("Summary: " + _(result['메타데이터']['요약']))
-    """
+    
     items = [result['메타데이터'] for result in top_results]
 
     full_response = evaluate_relevance_score_with_gpt(structured_input, items)
