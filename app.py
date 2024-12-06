@@ -254,7 +254,7 @@ def check_if_clinical_note(text):
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": _("당신은 임상 문서를 판별하는 전문가입니다.")},
+                {"role": "system", "content": "당신은 임상 문서를 판별하는 전문가입니다."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=10,
@@ -309,9 +309,9 @@ def update_example_note():
 # 사용자 정보 및 입력을 수집하는 함수
 def choose_demo_clinical_note():    
     # 예시 임상노트를 선택하는 경우에 대한 부분 추가
-    st.subheader(_("예시 임상노트 선택"))
+    st.subheader("Example Clinical Notes in Korean")
     st.selectbox(
-        _("아래에서 예시 임상노트를 선택하세요:"),
+        "Choose example note:",
         ["없음"] + list(demo_clinical_notes.keys()),
         key="selected_example",
         on_change=update_example_note
@@ -337,25 +337,25 @@ def check_clinical_note_status(user_input):
         st.session_state['user_input'] = user_input
 
     if user_input:
-        with st.spinner(_("임상 노트 여부 확인 중...")):
+        with st.spinner("Checking for the clinical note..."):
             is_clinical_note = check_if_clinical_note(user_input)
         if not is_clinical_note:
-            st.warning(_("입력한 텍스트가 임상노트가 아닙니다. 텍스트를 확인해주세요."))
+            st.warning("Text is not seems to be a clinical note. Please enter valid clinical note.")
         else:
             st.session_state.is_clinical_note = True
 
 
 def get_occupation():
-    st.subheader(_("어떤 분야에 종사하시나요?"))
+    st.subheader("Please select your occupation.")
     occupation = st.radio(
-        _("직업을 선택하세요:"),
+        "직업을 선택하세요:",
         options=["Doctor", "Nurse", "Insurance", "Others"],
         index=0,
         key='occupation_widget'
     )
 
     if occupation == "Others":
-        other_occupation = st.text_input(_("직업을 입력해주세요:"))
+        other_occupation = st.text_input("What is your occupation?")
     else:
         other_occupation = None
 
@@ -363,12 +363,12 @@ def get_occupation():
 
 def get_department():
     # Department 초기화 확인 및 선택창, 어차피 초기화 함수가 있으므로 제거해도 되는줄 알았는데 아니었다....
-    st.subheader(_("어떤 분과에 재직 중인지 알려주세요."))
+    st.subheader("Please tell your department.")
 
     department_index = department_options.index(st.session_state['department']) if st.session_state['department'] in department_options else 0
 
     department = st.selectbox(
-        _("분과를 선택하세요:"),
+        "Select your department:",
         options=department_options,
         index=department_index,
         key='department_widget' # 세션 상태 키와 동일하게 설정
@@ -404,11 +404,11 @@ def apply_custom_css_to_checkbox():
 def display_warning_without_agree():
     # 체크박스 위에 빨간색 안내 문구 추가 (체크되지 않은 경우에만 표시)
     if not st.session_state['agree_to_collect']:
-        st.markdown('<div class="warning-text">' + _("약관에 동의하셔야 삭감여부 확인이 가능합니다.") + '</div>', unsafe_allow_html=True)
+        st.markdown('<div class="warning-text">You need to check in the checkbox.</div>', unsafe_allow_html=True)
 
 def handle_agreement_state():
     agree_to_collect = st.checkbox(
-        _("사용자 정보를 수집하는 것에 동의합니다. 사용자의 텍스트 입력은 개인정보 보호를 위해 수집되지 않으며, 수집된 정보는 일정 기간 후 파기됩니다."),
+        "I agree to collect my data for analysis. It won't be shared with third parties.",
         key="agree_to_collect"
     )
     # '삭감 여부 확인' 버튼을 체크박스 동의 여부에 따라 활성화/비활성화
@@ -444,7 +444,7 @@ def load_data_if_department_selected(department):
         bucket_name = dataset_info["bucket_name"]
         file_key = dataset_info["file_key"]
 
-        st.write(_("{} 데이터 로드 중...").format(department))
+        st.write(f"{department} data loading...")
         try:
             embedded_data = load_data_from_s3(bucket_name, file_key)
             # st.success("데이터 로드 완료.")
@@ -525,7 +525,7 @@ def display_visitor_count():
             margin-bottom: 10px;
         }}
         </style>
-        <p class="total-visitor">{_("Total 방문자 수: ")}{visitor_count}</p>
+        <p class="total-visitor">Total 방문자 수: {visitor_count}</p>
         """, unsafe_allow_html=True)
 
 
@@ -769,11 +769,11 @@ def handle_retries(department, user_input):
 # 검색 결과 및 분석 결과를 출력하는 함수
 def display_results(embedding, vectors, metadatas, structured_input):
     top_results = find_top_n_similar(embedding, vectors, metadatas)
-    st.subheader(_("상위 유사 항목"))
+    st.subheader("Top 5 similar items")
     for idx, result in enumerate(top_results, 1):
         with st.expander(f" {idx}. -" + _(result['메타데이터']['제목'])):
-            st.write(_("제목: ") + _(result['메타데이터']['제목']))
-            st.write(_("요약: ") + _(result['메타데이터']['요약']))
+            st.write("Title: " + _(result['메타데이터']['제목']))
+            st.write("Summary: " + _(result['메타데이터']['요약']))
 
     items = [result['메타데이터'] for result in top_results]
 
@@ -789,16 +789,16 @@ def display_results(embedding, vectors, metadatas, structured_input):
             st.session_state.full_response = full_response
             st.session_state.scores = scores
 
-            st.subheader(_("연관성 평가 결과"))
-            with st.expander(_("연관성 평가 결과 상세 보기")):
+            st.subheader("Results with relevance scores")
+            with st.expander("Details for relevance scores"):
                 st.write(full_response)
 
             relevant_results = []
             for idx, doc in enumerate(items, 1):
                 score = scores.get(idx, None)
                 if score and score >= 7:
-                    with st.expander(_("항목 {idx} (score: {score})").format(idx=idx, score=score)):
-                        st.write(_("세부인정사항:"))
+                    with st.expander(f"item {idx} (score: {score})"):
+                        st.write("Full text for criterion:")
                         st.write(_(doc['세부인정사항']))
                     relevant_results.append(doc)
             
@@ -827,14 +827,14 @@ def extract_text_between_numbers(structured_input):
 # 사용자 입력 처리 및 임베딩 생성
 def process_user_input(user_input):
     try:
-        with st.spinner(_("사용자 입력 분석중...")):
+        with st.spinner("Analyzing your Clinical Note..."):
             structured_input = structure_user_input(user_input)
             if not structured_input:
                 st.error(_("입력 텍스트 분석에 실패했습니다."))
                 return None, None
 
         # st.success("입력 처리 완료")
-        with st.expander(_("구조화된 입력 보기")):
+        with st.expander("Structured Clinical Note by AI"):
             st.write(_(structured_input))
 
         # "2."부터 "6." 이전까지의 텍스트를 추출
@@ -843,7 +843,7 @@ def process_user_input(user_input):
             st.error(_("구조화된 입력에서 필요한 부분을 추출하지 못했습니다."))
             return None, None
 
-        with st.spinner(_("임베딩 생성 중...")):
+        with st.spinner("Vector Embedding for Clinical Note..."):
             embedding = get_embedding_from_openai(extracted_text)
             if not embedding:
                 st.error(_("죄송합니다. 입력한 내용을 처리하는 중 문제가 발생했습니다."))
@@ -865,7 +865,7 @@ def analyze_criteria(relevant_results, user_input):
 
     prompt_template = st.secrets["openai"]["prompt_interpretation"]
 
-    with st.spinner(_("개별 기준에 대한 심사 진행중...")):
+    with st.spinner("Analyzing for each relevant criterion..."):
         progress_bar = st.progress(0.0)
         total = len(relevant_results)
         for idx, criteria in enumerate(relevant_results, 1):
@@ -909,13 +909,13 @@ def analyze_criteria(relevant_results, user_input):
 def display_results_and_analysis():
     if st.session_state['results_displayed']:
         # 기존 판정 결과 표시
-        st.subheader(_("심사 결과"))
+        st.subheader("Prediction for Claim Approval")
         st.write(_(st.session_state.overall_decision))
 
         # 개별 기준에 대한 심사 결과 표시
-        st.subheader(_("개별 기준에 대한 심사 결과"))
+        st.subheader("Determination results for each criterion")
         for explanation in st.session_state.explanations:
-            with st.expander(f"{explanation['index']} - " + _("상세 보기")):
+            with st.expander(f"{explanation['index']} - Details"):
                 st.write(_(explanation['content_after_4']))
 
         # 업그레이드된 임상노트 생성 및 표시
@@ -927,11 +927,11 @@ def display_results_and_analysis():
             )
             st.session_state['upgraded_note'] = upgraded_note
 
-        st.subheader(_("업그레이드된 임상노트"))
-        with st.expander(_("업그레이드된 임상노트 보기")):
+        st.subheader("Upgraded Clinical Note")
+        with st.expander("Check upgraded clinical note"):
             if 'upgraded_note' in st.session_state:
                 upgraded_note = st.session_state['upgraded_note']
-                note_area = st.text_area(_("업그레이드된 임상노트"), value=_(upgraded_note), height=300)
+                note_area = st.text_area("upgraded note", value=_(upgraded_note), height=300)
                 
             else:
                 st.write(_("업그레이드된 임상노트를 생성하는 중 문제가 발생했습니다."))
@@ -954,13 +954,13 @@ def display_chat_messages():
 # 채팅 인터페이스를 Sidebar에 표시하는 함수
 def display_chat_interface():
     with st.sidebar:
-        st.header(_("AI Assistant와 채팅을 시작해보세요."))
+        st.header("Begin your conversation with AI Assistant.")
         display_chat_messages()
 
         # 사용자 입력받는 채팅 입력창
-        if user_question := st.chat_input(_("질문을 입력하세요")):
+        if user_question := st.chat_input("Ask a question..."):
             if user_question.strip() == "":
-                st.warning(_("질문을 입력해주세요."))
+                st.warning("Please ask a question.")
             else:
                 add_to_conversation('user', user_question)
                 with st.chat_message("user"):
@@ -995,7 +995,7 @@ def generate_chat_response(user_question):
             user_question=user_question
         )
     
-        with st.spinner(_("응답 생성 중...")):
+        with st.spinner("Generating an answer..."):
             response = openai.ChatCompletion.create(
                 model='gpt-4o-mini',
                 messages=[
@@ -1021,7 +1021,7 @@ def save_feedback_to_s3():
     # 세션 상태에서 기존의 사용자 로그 데이터를 가져옴
     user_log_data = st.session_state.get('user_log_data', {})
     if not user_log_data:
-        st.error(_("서비스를 이용하신 후 피드백을 보내주세요."))
+        st.error("Please send a feedback after using the app.")
         return
     
     # 피드백 추가
@@ -1065,16 +1065,16 @@ def feedback_section():
         """, unsafe_allow_html=True)
 
         # 작고 부담 없는 피드백 섹션
-        st.markdown('<p class="feedback-header">' + _("개발자에게 피드백 보내기") + '</p>', unsafe_allow_html=True)
+        st.markdown('<p class="feedback-header">개발자에게 피드백 보내기</p>', unsafe_allow_html=True)
 
-        feedback_text = st.text_input(_("피드백을 입력해주세요"), key="feedback_text")
+        feedback_text = st.text_input("Send you feedback.", key="feedback_text")
 
         if st.button("피드백 전송!"):
             if feedback_text.strip() == "":
-                st.warning(_("피드백을 입력해주세요."))
+                st.warning("Please write your feedback.")
             else:
                 save_feedback_to_s3()
-                st.success(_("피드백이 전송되었습니다. 감사합니다!"))
+                st.success("Feedback sent successfully! Thank you for your feedback.") 
 
 
 # 업그레이드된 임상노트를 생성하는 함수
@@ -1091,10 +1091,11 @@ def generate_upgraded_clinical_note(overall_decision, user_input, explanations):
         # 삭감 사유 또는 추가 개선 사항을 추출
         if overall_decision == "삭감될 가능성 높음":
             # 삭감 사유를 explanations에서 추출
-            guidance = _("다음 삭감 사유를 고려하여 임상노트를 개선하세요:\n") + _(explanations_text)     
+            guidance = f"다음 삭감 사유를 고려하여 임상노트를 개선하세요:\n  {explanations_text}"
+            
         else:
             # 추가적인 개선 사항 제안
-            guidance = _("임상노트를 더욱 완벽하게 만들기 위해 추가할 수 있는 내용을 추가하세요. 보존적 치료가 앞서 시행되었음을 강조하세요.")
+            guidance = "임상노트를 더욱 완벽하게 만들기 위해 추가할 수 있는 내용을 추가하세요. 보존적 치료가 앞서 시행되었음을 강조하세요."
 
         prompt = prompt_template.format(
             overall_decision=overall_decision,
@@ -1103,7 +1104,7 @@ def generate_upgraded_clinical_note(overall_decision, user_input, explanations):
             explanations_text=explanations_text
         )
 
-        with st.spinner(_("업그레이드된 임상노트 생성 중...")):
+        with st.spinner("Generating upgraded clinical note..."):
             response = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -1141,7 +1142,7 @@ def main():
     handle_agreement_state()
 
     # 2. '삭감 여부 확인' 버튼 클릭 시 초기화 및 재시도 시작
-    if st.button(_("삭감 여부 확인"), disabled=st.session_state['button_disabled']):
+    if st.button("Predict the cost reduction", disabled=st.session_state['button_disabled']):
         if not st.session_state['agree_to_collect']:
             st.warning(_("사용자 정보 수집에 동의해야 합니다."))
         elif not st.session_state.is_clinical_note:
