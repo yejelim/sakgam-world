@@ -792,9 +792,6 @@ def display_results(embedding, vectors, metadatas, structured_input):
             for idx, doc in enumerate(items, 1):
                 score = scores.get(idx, None)
                 if score and score >= 7:
-                    with st.expander(f"item {idx} (score: {score})"):
-                        st.write("Full text for criterion:")
-                        st.write(_(doc['세부인정사항']))
                     relevant_results.append(doc)
             
             if not relevant_results:
@@ -827,10 +824,6 @@ def process_user_input(user_input):
             if not structured_input:
                 st.error(_("입력 텍스트 분석에 실패했습니다."))
                 return None, None
-
-        # st.success("입력 처리 완료")
-        with st.expander("Structured Clinical Note by AI"):
-            st.write(_(structured_input))
 
         # "2."부터 "6." 이전까지의 텍스트를 추출
         extracted_text = extract_text_between_numbers(structured_input)
