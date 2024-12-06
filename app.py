@@ -222,7 +222,7 @@ def initialize_session_state():
         'upgraded_note': None,
         'copy_text': '',
         'department': department_options[0],
-        'selected_example': "없음",
+        'selected_example': "No thanks.",
         'occupation': '',
         'other_occupation': '',
         'structured_input': '',
@@ -298,7 +298,7 @@ def save_user_log_to_s3():
 # 콜백을 사용해서 selectbox 예시노트 선택시 자동으로 text_area, department 업데이트를 UI로 반영해주는 함수
 def update_example_note():
     selected_example = st.session_state['selected_example']
-    if selected_example != "None":
+    if selected_example != "No thanks.":
         department, example_note = demo_clinical_notes[selected_example]
         st.session_state['user_input'] = example_note
         st.session_state['department'] = department
@@ -312,7 +312,7 @@ def choose_demo_clinical_note():
     st.subheader("Example Clinical Notes in Korean")
     st.selectbox(
         "Choose example note:",
-        ["없음"] + list(demo_clinical_notes.keys()),
+        ["No thanks."] + list(demo_clinical_notes.keys()),
         key="selected_example",
         on_change=update_example_note
     )
@@ -751,7 +751,7 @@ def handle_retries(department, user_input):
                     st.session_state.results_displayed = True
                     st.session_state.retry_type = None
                     return
-            # 스코어 추출 실패 또는 유의미한 결과 없음
+            # 스코어 추출 실패 또는 유의미한 결과 없을 때
             handle_retries(department, user_input)
         else:
             # GPT 호출 실패
