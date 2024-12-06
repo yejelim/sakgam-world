@@ -525,7 +525,7 @@ def display_visitor_count():
             margin-bottom: 10px;
         }}
         </style>
-        <p class="total-visitor">Total 방문자 수: {visitor_count}</p>
+        <p class="total-visitor">Total Visitors: {visitor_count}</p>
         """, unsafe_allow_html=True)
 
 
@@ -1066,11 +1066,11 @@ def feedback_section():
         """, unsafe_allow_html=True)
 
         # 작고 부담 없는 피드백 섹션
-        st.markdown('<p class="feedback-header">개발자에게 피드백 보내기</p>', unsafe_allow_html=True)
+        st.markdown('<p class="feedback-header">Send a feedback for developer</p>', unsafe_allow_html=True)
 
         feedback_text = st.text_input("Send you feedback.", key="feedback_text")
 
-        if st.button("피드백 전송!"):
+        if st.button("Send a Feedback!"):
             if feedback_text.strip() == "":
                 st.warning("Please write your feedback.")
             else:
