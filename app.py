@@ -120,7 +120,7 @@ def _(text):
 
 #예시 임상노트 데이터 사용자가 선택할 수 있게 추가
 demo_clinical_notes = {
-    "척추관절질환-사례1": ("척추관절질환", ''' 
+    "Spine/Joint Case": ("Spinal Joint Disease", ''' 
 1달 전 무거운 것 들다가 
 우측 엉치 통증 발생
 우측 종아리, 발바닥 전체가 쥐난다
@@ -194,7 +194,7 @@ Appendectomy
 }
 
 department_options = [
-    "척추관절질환",
+    "Spinal Joint Disease",
     "혈관외과 (Vascular Surgery)",
     "대장항문외과 (Colorectal Surgery)",
     "정맥경장영양 (TPN)"
@@ -418,7 +418,7 @@ def handle_agreement_state():
 
 # 분과 데이터셋: 추가될 때마다 업데이트 할 부분
 department_datasets = {
-    "척추관절질환": {
+    "Spinal Joint Disease": {
         "bucket_name": "hemochat-rag-database",
         "file_key": "18_aga_tagged_embedded_data.json"
     },
